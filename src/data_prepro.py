@@ -110,13 +110,14 @@ class CoVoST(Dataset):
         Outputs:
         tuple: (waveform, sample_rate, sentence, translation, speaker_id, sample_id)
         '''
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         data = self.data[n]
         path = self.root / 'clips' / data['path']
         waveform, sample_rate = torchaudio.load(path)
-        waveform = torch.tensor(waveform)
+        waveform = torch.tensor(waveform.clone().detach()).to(device)
         sentence = data['sentence']
         translation = data['translation']
-        speaker_id = data['cliente_id']
+        speaker_id = data['client_id']
         _id = data['path'].replace('.mp3', '')
         return waveform, sample_rate, sentence, translation, speaker_id, _id
 

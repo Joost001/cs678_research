@@ -2,9 +2,10 @@
 
 # Torch, Audio
 import torch
+import torchaudio
 import torchaudio.sox_effects as ta_sox
 from torchaudio.functional import melscale_fbanks
-import soundfile as sf
+# import soundfile as sf
 import torchaudio.compliance.kaldi as ta_kaldi
 
 # General
@@ -23,29 +24,9 @@ def load_df_from_tsv(path: Union[str, Path]) -> pd.DataFrame: #note that Union[s
     _path = path if isinstance(path, str) else path.as_posix() #as_posix() Return a string representation of the path with forward slashes (/). Ex: p.as_posix()->'c:/windows'
     return pd.read_csv(_path, sep='\t', header=0, encoding='utf-8', escapechar='\\', quoting=csv.QUOTE_NONE, na_filter=False)
 
-def get_zip_manifest(zip_path: Path, zip_root: Optional[Path] = None, is_audio=False):
-    _zip_path = Path.joinpath(zip_root or Path(""), zip_path)
-    with zipfile.ZipFile(_zip_path, mode="r") as f:
-        info = f.infolist()
-    paths, lengths = {}, {}
-    for i in tqdm(info):
-        utt_id = Path(i.filename).stem
-        offset, file_size = i.header_offset + 30 + len(i.filename), i.file_size
-        paths[utt_id] = f"{zip_path.as_posix()}:{offset}:{file_size}"
-        with open(_zip_path, "rb") as f:
-            f.seek(offset)
-            byte_data = f.read(file_size)
-            assert len(byte_data) > 1
-            byte_data_fp = io.BytesIO(byte_data)
-            if is_audio:
-                lengths[utt_id] = sf.info(byte_data_fp).frames
-            else:
-                lengths[utt_id] = np.load(byte_data_fp).shape[0]
-    return paths, lengths
-
 def extract_fbank_features(waveform: torch.FloatTensor, sample_rate: int, output_path: Optional[Path] = None,
                             n_mel_bins: int = 80, overwrite: bool = False):
-    
+
     if output_path is not None and output_path.is_file() and not overwrite:
         return
 
@@ -62,7 +43,7 @@ def extract_fbank_features(waveform: torch.FloatTensor, sample_rate: int, output
 
     if output_path is not None:
         np.save(output_path.as_posix(), features)
-    
+
     return features
 
 def convert_waveform(waveform: Union[np.ndarray, torch.Tensor], sample_rate: int, normalize_volume: bool = False,
@@ -119,12 +100,12 @@ def filter_manifest_df(
                 f"short speech (<{min_n_frames} frames)": df["n_frames"] < min_n_frames,
                 "empty sentence": df["tgt_text"] == ""
     }
-    
+
     if is_train_split:
         filters[f"long speech (>{max_n_frames} frames)"] = df["n_frames"] > max_n_frames
     if extra_filters is not None:
         filters.update(extra_filters)
-    
+
     invalid = reduce(lambda x, y: x | y, filters.values())
     valid = ~invalid
     print(
@@ -169,6 +150,19 @@ def get_zip_manifest(zip_path: Path, zip_root: Optional[Path] = None):
             byte_data_fp = io.BytesIO(byte_data)
             lengths[utt_id] = np.load(byte_data_fp).shape[0]
     return paths, lengths
+
+def get_fbank_wave_from_zip(zip_path: Path, manifest_path: Path, zip_root: Optional[Path] = None):
+    '''
+    Return the fbank from the zip in numpy format
+    '''
+    _zip_path = Path.joinpath(zip_root or Path(""), zip_path)
+    _path,  offset, file_size = str(manifest_path).split(':')
+    with open(_zip_path, "rb") as f:
+        f.seek(offset)
+        byte_data = f.read(file_size)
+        byte_data_fp = io.BytesIO(byte_data)
+        fbank_wave = np.load(byte_data_fp)
+    return fbank_wave
 
 def is_npy_data(data: bytes) -> bool:
     return data[0] == 147 and data[1] == 78
