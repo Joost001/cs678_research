@@ -157,6 +157,8 @@ def get_fbank_wave_from_zip(zip_path: Path, manifest_path: Path, zip_root: Optio
     '''
     _zip_path = Path.joinpath(zip_root or Path(""), zip_path)
     _path,  offset, file_size = str(manifest_path).split(':')
+    offset, file_size = int(offset), int(file_size)
+    
     with open(_zip_path, "rb") as f:
         f.seek(offset)
         byte_data = f.read(file_size)

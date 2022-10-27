@@ -32,7 +32,7 @@ class CoVoST(Dataset):
     target_language (str): target (text) language
     '''
     SPLITS = ['train', 'dev', 'test']
-
+    
     #Available pair of translations
     XX_EN_LANGUAGES=['fr', 'es', 'ca', 'fa']
     EN_XX_LANGUAGES = ['ca', 'fa']
@@ -110,11 +110,10 @@ class CoVoST(Dataset):
         Outputs:
         tuple: (waveform, sample_rate, sentence, translation, speaker_id, sample_id)
         '''
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         data = self.data[n]
         path = self.root / 'clips' / data['path']
         waveform, sample_rate = torchaudio.load(path)
-        waveform = torch.tensor(waveform.clone().detach()).to(device)
+        waveform = torch.tensor(waveform)
         sentence = data['sentence']
         translation = data['translation']
         speaker_id = data['client_id']
