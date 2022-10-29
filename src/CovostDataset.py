@@ -6,20 +6,33 @@ import torch.nn.functional as F
 #General
 import pandas as pd
 import numpy as np
-import argparse
-import math
 from pathlib import Path
 from utils import (
     load_df_from_tsv,
     get_fbank_wave_from_zip
     )
+from tokenizer import CovostTokenizer
 
 class CovostDataset(Dataset):
-    def __init__(self, tsv_root: str, zip_fbank_path: str, args):
+    '''
+    Create a CovostDataset that extends Dataset class.
+
+    Note that args argument must be a argparse with the following args parsed:
+    batch_size: int, size of each batch
+    src_lan: str, source language (can be en, es, fr, fa, ca)
+    tgt_lan: str, target language (can be en, ca, fa)
+    vocab_size: int, size of vocab
+    '''
+    def __init__(self, tsv_root: str, zip_fbank_path: str, corpus_path: str, args):
         self.dataset = load_df_from_tsv(tsv_root)
         self.zip_fbank_path = zip_fbank_path
+        self.corpus_path = corpus_path
         self.p = args
         self.max_n_frame = 0
+        self.tokenizer = CovostTokenizer(corpus_root = self.corpus_path,
+                                        src_lan = self.p.src_lan,
+                                        tgt_lan = self.p.tgt_lan,
+                                        vocab_size = self.p.vocab_size)
         
     def __len__(self):
         return len(self.dataset)
@@ -48,6 +61,7 @@ class CovostDataset(Dataset):
         
         n_frames = np.array(frames)
         tgt_texts = np.array([x['tgt_text'] for x in data])
+        tgt_texts = self.tokenizer.tokenize(tgt_texts)
         speakers = np.array([x['speaker'] for x in data])
         
         fbank_waves = torch.empty((0, max_frames, data[0]['fbank_wave'].shape[1]))

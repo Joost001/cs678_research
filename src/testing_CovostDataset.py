@@ -11,12 +11,16 @@ from CovostDataset import CovostDataset
 
 tsv_root = '/datasets/CS678/es/train_st_es_en.tsv'
 zip_fbank_path = '/datasets/CS678/es/fbank80.zip'
+corpus_path = '/datasets/CS678/es/corpus_train_es_en.txt'
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", type=int, default=128)
+parser.add_argument("--src_lan", type=str, default='es', help='source language (can be en, es, fr, fa, ca)')
+parser.add_argument("--tgt_lan", type=str, default='en', help='target language (can be en, ca, fa)')
+parser.add_argument("--vocab_size", type=int, default=2000, help='size of vocab')
 args = parser.parse_args()
 
-train_dataset = CovostDataset(tsv_root=tsv_root, zip_fbank_path=zip_fbank_path, args=args)
+train_dataset = CovostDataset(tsv_root=tsv_root, zip_fbank_path=zip_fbank_path, corpus_path=corpus_path, args=args)
 
 train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=args.batch_size, collate_fn=train_dataset.collate_fn)
 
