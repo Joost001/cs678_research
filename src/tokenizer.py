@@ -12,7 +12,7 @@ class CovostTokenizer(object):
 
         self.model_prefix = 'm'+self.src_lan+'_'+self.tgt_lan
         spm.SentencePieceTrainer.train(input=self.corpus_root, vocab_size=self.vocab_size, model_prefix=self.model_prefix,
-                                        pad_id=1, unk_id=3, bos_id=0, eos_id=2, pad_piece='<pad>', 
+                                        pad_id=0, unk_id=3, bos_id=1, eos_id=2, pad_piece='<pad>', 
                                         unk_piece='<unk>', bos_piece='<s>', eos_piece='</s>')
         
         sp = spm.SentencePieceProcessor()

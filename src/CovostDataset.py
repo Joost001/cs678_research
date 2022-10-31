@@ -68,15 +68,15 @@ class CovostDataset(Dataset):
         for i in range(len(data)):
             tensor_fbank_wave = torch.Tensor(data[i]['fbank_wave']).view(1,-1,data[0]['fbank_wave'].shape[1])
             total_padding = max_frames-data[i]['fbank_wave'].shape[0]
-        
+            
             # Hack: Padding size should be less than the corresponding input dimension
             while total_padding>=data[i]['fbank_wave'].shape[0]:
-                tensor_fbank_wave = F.pad(tensor_fbank_wave, (0,0,0,data[i]['fbank_wave'].shape[0]-1), mode='reflect')
+                tensor_fbank_wave = F.pad(tensor_fbank_wave, (0,0,0,data[i]['fbank_wave'].shape[0]-1), mode='constant', value=0)
                 total_padding -= (data[i]['fbank_wave'].shape[0]-1)
             
-            tensor_fbank_wave = F.pad(tensor_fbank_wave, (0,0,0,total_padding), mode='reflect')
+            tensor_fbank_wave = F.pad(tensor_fbank_wave, (0,0,0,total_padding), mode='constant', value = 0)
             fbank_waves = torch.cat((fbank_waves, tensor_fbank_wave), 0)
-        
+
         return fbank_waves, n_frames, tgt_texts, speakers
         
     def collate_fn(self, all_data):
