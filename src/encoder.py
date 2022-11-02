@@ -5,15 +5,17 @@ from torch import nn, Tensor
 import torch.nn.functional as f
 
 
-def scaled_dot_product_attention(query, key, value):
+def scaled_dot_product_attention(query, key, value, padding_mask=None):
     """
     Scaled dot product for the attention heads. From https://arxiv.org/pdf/1706.03762.pdf section 3.2.1.
+    :param padding_mask:
     :param query:
     :param key:
     :param value:
     :return:
     """
     score = query.bmm(key.transpose(1, 2))
+    score = score.Tensor.masked_fill_(padding_mask, -float('inf'))
     scale = math.sqrt(query.size(-1))
     softmax = f.softmax(score / scale, dim=-1)
     return softmax.bmm(value)
