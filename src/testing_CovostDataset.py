@@ -22,11 +22,16 @@ args = parser.parse_args()
 
 train_dataset = CovostDataset(tsv_root=tsv_root, zip_fbank_path=zip_fbank_path, corpus_path=corpus_path, args=args)
 
+
 train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=args.batch_size, collate_fn=train_dataset.collate_fn)
 
 for i_batch, sample_batched in enumerate(train_dataloader):
     b_waves, b_frames, b_texts, b_speakers = sample_batched[0]['fbank_waves'], sample_batched[0]['n_frames'], \
                                                 sample_batched[0]['tgt_texts'], sample_batched[0]['speakers']
+    
+    print('Example of decoding from ids to text:')
+    print(f'Ids: {b_texts[0]}')
+    print(f'Texts: {train_dataset.tokenizer.sp.decode_ids(b_texts[0])}')
     
     print(f'batch number: {i_batch} done')
     
