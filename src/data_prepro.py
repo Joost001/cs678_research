@@ -1,28 +1,28 @@
-## Based on the fairseq repo: https://github.com/facebookresearch/fairseq
-#Torch
+"""
+Based on the fairseq repo: https://github.com/facebookresearch/fairseq
+"""
+import argparse
+import os
+from pathlib import Path
+from typing import Tuple, Optional
+import pandas as pd
 import torch
 import torchaudio
-import torchaudio.functional as F
-import torchaudio.transforms as T
-from torchaudio.datasets.utils import download_url, extract_archive
-from torch.utils.data import Dataset, DataLoader
 from torch import Tensor
-
-#General
-import pandas as pd
-from typing import Tuple, Optional
-from pathlib import Path
-from utils import load_df_from_tsv, extract_fbank_features, filter_manifest_df, save_df_to_tsv, create_zip, get_zip_manifest
-import argparse
+from torch.utils.data import Dataset
+from torchaudio.datasets.utils import download_url, extract_archive
 from tqdm import tqdm
-import os
-import io
-os.environ['KMP_DUPLICATE_LIB_OK']='True'
+
+from utils import load_df_from_tsv, extract_fbank_features, filter_manifest_df, save_df_to_tsv, create_zip, \
+    get_zip_manifest
+
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 COLUMNS = ['id', 'audio', 'n_frames', 'tgt_text', 'speaker']
 
+
 class CoVoST(Dataset):
-    '''
+    """
     Create a dataset for CoVoST version 4.0
 
     Inputs:
@@ -30,14 +30,14 @@ class CoVoST(Dataset):
     split (str): split from datasets (train, test or dev)
     source_language (str): source (audio) langauge
     target_language (str): target (text) language
-    '''
+    """
     SPLITS = ['train', 'dev', 'test']
     
-    #Available pair of translations
-    XX_EN_LANGUAGES=['fr', 'es', 'ca', 'fa']
+    # Available pair of translations
+    XX_EN_LANGUAGES = ['fr', 'es', 'ca', 'fa']
     EN_XX_LANGUAGES = ['ca', 'fa']
 
-    #Translations
+    # Translations
     COVOST_URL_TEMPLATE = (
         "https://dl.fbaipublicfiles.com/covost/"
         "covost_v2.{src_lang}_{tgt_lang}.tsv.tar.gz"
@@ -57,7 +57,7 @@ class CoVoST(Dataset):
         assert cv_tsv_path.is_file()
 
         # Download translations in case they are not in the path
-        covost_url = self.COVOST_URL_TEMPLATE.format(src_lang=source_language, tgt_lang = target_language)
+        covost_url = self.COVOST_URL_TEMPLATE.format(src_lang=source_language, tgt_lang=target_language)
         covost_archive = self.root / Path(covost_url).name.replace('.tar.gz', '')
         # Try first with the .tsv file then with the .tar.gz file
         if not covost_archive.is_file():
@@ -71,24 +71,24 @@ class CoVoST(Dataset):
         covost_tsv = load_df_from_tsv(self.root / Path(covost_url).name.replace('.tar.gz', ''))
 
         df = pd.merge(
-            left = cv_tsv[['path', 'sentence', 'client_id']],
-            right = covost_tsv[['path', 'translation', 'split']],
-            how = 'inner',
-            on = 'path'
+            left=cv_tsv[['path', 'sentence', 'client_id']],
+            right=covost_tsv[['path', 'translation', 'split']],
+            how='inner',
+            on='path'
         )
 
         # Obtain the split required (train, dev, test)
         # For some reason, in validated and downloaded translations there are some examples with the
         # label 'train_covost'. In the paper these examples are also included in the training 
         assert split in self.SPLITS
-        if split=='train':
+        if split == 'train':
             df = df[(df['split'] == split) | (df['split'] == f'{split}_covost')]
         else:
             df = df[df['split'] == split]
 
-        data = df.to_dict(orient = 'index').items()
+        data = df.to_dict(orient='index').items()
         data = [v for k, v in sorted(data, key=lambda x:x[0])]
-        self.data =[]
+        self.data = []
         for e in data:
             try:
                 path = self.root / 'clips' / e['path']
@@ -101,7 +101,7 @@ class CoVoST(Dataset):
         return len(self.data)
 
     def __getitem__(self, n: int) -> Tuple[Tensor, int, str, str, Optional[str], str, str]:
-        '''
+        """
         Load and return the n-th sample from the dataset.
 
         Inputs:
@@ -109,7 +109,7 @@ class CoVoST(Dataset):
 
         Outputs:
         tuple: (waveform, sample_rate, sentence, translation, speaker_id, sample_id)
-        '''
+        """
         data = self.data[n]
         path = self.root / 'clips' / data['path']
         waveform, sample_rate = torchaudio.load(path)
@@ -129,9 +129,9 @@ class CoVoST(Dataset):
 
 
 def process(args):
-    '''
+    """
     Process the dataset
-    '''
+    """
     print('processing')
     # Retreive the root folder that contains the audio from source langauge
     root = Path(args.data_root).absolute() / args.src_lang
@@ -178,10 +178,12 @@ def process(args):
         df = filter_manifest_df(df, is_train_split=is_train_split)
         save_df_to_tsv(df, root / f"{split}_{task}.tsv")
 
+
 if __name__ == '__main__':
     print('Reading arguments...')
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-root", "-d", required=True, type=str, help="data root with sub-folders for each language <root>/<src_lang>")
+    parser.add_argument("--data-root", "-d", required=True, type=str,
+                        help="data root with sub-folders for each language <root>/<src_lang>")
     parser.add_argument("--src-lang", "-s", required=True, type=str)
     parser.add_argument("--tgt-lang", "-t", type=str)
     
