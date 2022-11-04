@@ -6,7 +6,6 @@ import io
 import zipfile
 from functools import reduce
 from pathlib import Path
-from typing import Union, Optional, Tuple
 import numpy as np
 import pandas as pd
 import torch
@@ -65,7 +64,8 @@ def convert_waveform(waveform, sample_rate, normalize_volume=False, to_mono=Fals
     :param normalize_volume: (bool): perform volume normalization
     :param to_mono: (bool): convert to mono channel if having multiple channels
     :param to_sample_rate: (int): target sample rate
-    :return: (Tuple[Union[np.ndarray, torch.Tensor], int]): waveform converted 2D waveform (channels x length), sample_rate (float): target sample rate
+    :return: (Tuple[Union[np.ndarray, torch.Tensor], int]): waveform converted 2D waveform (channels x length),
+                sample_rate (float): target sample rate
     """
     effects = []
     if normalize_volume:
@@ -112,7 +112,7 @@ def filter_manifest_df(df, is_train_split=False, extra_filters=None, min_n_frame
     :return:
     """
     filters = {"no speech": df["audio"] == "", f"short speech (<{min_n_frames} frames)": df["n_frames"] < min_n_frames,
-                "empty sentence": df["tgt_text"] == ""}
+               "empty sentence": df["tgt_text"] == ""}
 
     if is_train_split:
         filters[f"long speech (>{max_n_frames} frames)"] = df["n_frames"] > max_n_frames
@@ -151,7 +151,7 @@ def create_zip(data_root, zip_path):
             f.write(path, arcname=path.name)
 
 
-def get_zip_manifest(zip_path, zip_root = None):
+def get_zip_manifest(zip_path, zip_root=None):
     """
     # todo insert desc of function
     :param zip_path: (Path):

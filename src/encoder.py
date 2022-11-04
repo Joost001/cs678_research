@@ -1,7 +1,7 @@
 import math
 
 import torch
-from torch import nn, Tensor
+from torch import nn
 import torch.nn.functional as f
 
 
@@ -57,7 +57,7 @@ class MultiHeadAttention(nn.Module):
 
 def feed_forward(dim_input=512, dim_feedforward=2048):
     """
-    position-wise feed-forward network. defaults are from the paper.
+    position-wise feed-forward network. defaults are from the paper
     :param dim_input:
     :param dim_feedforward:
     :return: nn.Module
@@ -102,7 +102,8 @@ class TransformerEncoderLayer(nn.Module):
 class TransformerEncoder(nn.Module):
     def __init__(self, num_layers=6, dim_model=512, num_heads=8, dim_feedforward=2048, dropout=0.1):
         super().__init__()
-        self.layers = nn.ModuleList([TransformerEncoderLayer(dim_model, num_heads, dim_feedforward, dropout) for _ in range(num_layers)])
+        self.layers = nn.ModuleList([TransformerEncoderLayer(dim_model, num_heads, dim_feedforward, dropout)
+                                     for _ in range(num_layers)])
 
     def forward(self, source):
         seq_len, dimension = source.size(1), source.size(2)
