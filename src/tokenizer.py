@@ -18,13 +18,19 @@ class CovostTokenizer(object):
         self.tgt_lan = tgt_lan
         self.vocab_size = vocab_size
 
-        self.model_prefix = 'm'+self.src_lan+'_'+self.tgt_lan
-        spm.SentencePieceTrainer.train(input=self.corpus_root, vocab_size=self.vocab_size,
-                                       model_prefix=self.model_prefix, pad_id=0, unk_id=3, bos_id=1, eos_id=2,
-                                       pad_piece='<pad>', unk_piece='<unk>', bos_piece='<s>', eos_piece='</s>')
+        self.model_prefix = 'm_'+self.src_lan+'_'+self.tgt_lan
+        
+        self.model_p = Path(self.model_prefix+'.model')
+        self.vocab_p = Path(self.model_prefix+'.vocab')
+        
+        if not self.model_p.is_file():
+            spm.SentencePieceTrainer.train(input=self.corpus_root, vocab_size=self.vocab_size, model_prefix=self.model_prefix,
+                                        pad_id=0, unk_id=3, bos_id=1, eos_id=2, pad_piece='<pad>', 
+                                        unk_piece='<unk>', bos_piece='<s>', eos_piece='</s>')
         
         sp = spm.SentencePieceProcessor()
         self.sp = sp
+        self.sp.load(self.model_prefix+'.model')
         
     def tokenize(self, tgt_texts):
         """
@@ -32,8 +38,6 @@ class CovostTokenizer(object):
         :param tgt_texts: (list):
         :return:
         """
-        self.sp.load(self.model_prefix+'.model')
-
         max_len = 0
         tokens = []
         for tgt in tgt_texts:
