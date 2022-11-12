@@ -6,9 +6,11 @@ from torchtext.data.metrics import bleu_score
 import time, random, numpy as np, argparse, sys, re, os
 
 from CovostDataset import CovostDataset
-from encoder_decoder import CustomTransformer, create_mask
+from encoder_decoder_new import CustomTransformer, create_mask #, make_tgt_mask
 
-# import ipdb
+import ipdb
+
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def seed_everything(seed=11711):
     random.seed(seed)
@@ -19,7 +21,37 @@ def seed_everything(seed=11711):
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-def model_eval(dataloader, tokenizer, model, padding_indx, loss_fn, device):
+#based on https://pytorch.org/tutorials/beginner/translation_transformer.html
+def greedy_decode(model, src, tgt, src_mask, max_len, bos_id=1, eos_id=2):
+    src = src.to(DEVICE)
+    src_mask = src_mask.to(DEVICE)
+    
+    # ipdb.set_trace()
+    memory = model.encoder(model.positional_encoding_enc(src), src_mask)
+    memory = memory.to(DEVICE)
+    # memory = model.encoder(model.positional_encoding(src), src_mask)
+    
+    output_tokens = torch.ones(src.size(0),1).fill_(bos_id).type(torch.long).to(DEVICE)
+    for i in range(max_len-1):
+        _, tgt_padding_mask, tgt_mask = create_mask(src, output_tokens, 0)
+        tgt_padding_mask, tgt_mask = tgt_padding_mask.to(DEVICE), tgt_mask.to(DEVICE)
+        
+        #Use the previous names
+        out = model.positional_encoding_dec(model.emb_dec(output_tokens))
+        out = model.decoder(out, memory, tgt_padding_mask, tgt_mask)
+        
+        # out = model.positional_encoding(model.tok_emb(output_tokens))
+        # out = model.decoder(out, memory, tgt_padding_mask, tgt_mask)
+        
+        prob = model.generator(out[:,-1, :])
+        _, next_word = torch.max(prob, dim=-1)
+        next_word = next_word.type(torch.LongTensor)
+        
+        output_tokens = torch.cat([output_tokens, next_word.view(-1,1)], dim=1)
+    
+    return output_tokens
+
+def model_eval(dataloader, tokenizer, model, padding_indx, loss_fn):
     model.eval() # switch to eval model, will turn off randomness like dropout
     
     loss_batches = 0
@@ -31,13 +63,14 @@ def model_eval(dataloader, tokenizer, model, padding_indx, loss_fn, device):
         b_waves, b_frames, b_texts, b_speakers = sample_batched[0]['fbank_waves'], sample_batched[0]['n_frames'], \
                                                         sample_batched[0]['tgt_texts'], sample_batched[0]['speakers']
 
-        b_waves = b_waves.to(device)
-        tgt = torch.tensor(b_texts).to(device)
+        b_waves = b_waves.to(DEVICE)
+        tgt = torch.tensor(b_texts).to(DEVICE)
         tgt_input = tgt[:, :-1]
         
         src_padding_mask, tgt_padding_mask, tgt_mask = create_mask(b_waves, tgt_input, padding_indx)
-        src_padding_mask, tgt_padding_mask, tgt_mask = src_padding_mask.to(device), tgt_padding_mask.to(device), tgt_mask.to(device)
-
+        src_padding_mask, tgt_padding_mask, tgt_mask = src_padding_mask.to(DEVICE), tgt_padding_mask.to(DEVICE), tgt_mask.to(DEVICE)
+        
+        
         logits = model(b_waves, tgt_input, src_padding_mask=src_padding_mask, tgt_padding_mask=tgt_padding_mask, tgt_mask=tgt_mask)
         tgt_out = tgt[:, 1:]
         
@@ -45,10 +78,9 @@ def model_eval(dataloader, tokenizer, model, padding_indx, loss_fn, device):
         loss_batches += loss.item()
         num_batches += 1
             
-        pbb = F.softmax(logits, dim=-1)
-        texts = torch.argmax(pbb, dim=-1).type(torch.LongTensor)
+        texts = greedy_decode(model, b_waves, tgt_input, src_padding_mask, tgt_input.size(dim=1)+5, bos_id=1, eos_id=2)
         
-        
+        # ipdb.set_trace()
         for i in range(len(b_texts)):
             candidate_corpus.append(tokenizer.sp.decode_ids([word.item() for word in texts[i]]).replace('.',' ').split())
             reference_corpus.append(tokenizer.sp.decode_ids(b_texts[i]).replace('.',' ').split())
@@ -60,13 +92,12 @@ def model_eval(dataloader, tokenizer, model, padding_indx, loss_fn, device):
     return bleu, ave
 
 def train(args):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     train_tsv_root = f'/datasets/CS678/{args.src_lan}/train_st_{args.src_lan}_{args.tgt_lan}.tsv'
     
     args.vocab_size = args.vocab_size+4
     
     zip_fbank_path = f'/datasets/CS678/{args.src_lan}/fbank80.zip'
-    corpus_path = f'/scratch/jvasqu6/CS678/Project/corpus/{args.src_lan}/corpus_train_{args.src_lan}_{args.tgt_lan}.txt' #f'/datasets/CS678/{args.src_lan}/corpus_train_{args.src_lan}_{args.tgt_lan}.txt'
+    corpus_path = f'/datasets/CS678/{args.src_lan}/corpus_train_{args.src_lan}_{args.tgt_lan}.txt' #f'/scratch/jvasqu6/CS678/Project/corpus/{args.src_lan}/corpus_train_{args.src_lan}_{args.tgt_lan}.txt'
 
     train_dataset = CovostDataset(tsv_root=train_tsv_root, zip_fbank_path=zip_fbank_path, corpus_path=corpus_path, args=args)
     train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=args.batch_size, collate_fn=train_dataset.collate_fn)
@@ -74,10 +105,10 @@ def train(args):
     model = CustomTransformer(embed_size=args.embed_size,
                                 heads=args.num_heads,
                                 inner_layer_size=args.inner_layer_size,
-                                n_blocks=args.num_blocs,
+                                n_blocks=args.num_blocks,
                                 vocab_size=args.vocab_size) #4 for the 4 tokens: BOS, EOS, UNK, PAD
 
-    model = model.to(device)
+    model = model.to(DEVICE)
     
     padding_indx = 0
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5, betas=(0.9, 0.98), eps=1e-9)
@@ -112,18 +143,19 @@ def train(args):
             b_waves, b_frames, b_texts, b_speakers = sample_batched[0]['fbank_waves'], sample_batched[0]['n_frames'], \
                                                         sample_batched[0]['tgt_texts'], sample_batched[0]['speakers']
     
-            b_waves = b_waves.to(device)
-            tgt = torch.tensor(b_texts).to(device)
+            b_waves = b_waves.to(DEVICE)
+            tgt = torch.tensor(b_texts).to(DEVICE)
             tgt_input = tgt[:, :-1]
-    
-            src_padding_mask, tgt_padding_mask, tgt_mask = create_mask(b_waves, tgt_input, padding_indx)
-            src_padding_mask, tgt_padding_mask, tgt_mask = src_padding_mask.to(device), tgt_padding_mask.to(device), tgt_mask.to(device)
-    
-            logits = model(b_waves, tgt_input, src_padding_mask=src_padding_mask, tgt_padding_mask=tgt_padding_mask, tgt_mask=tgt_mask)
-    
             tgt_out = tgt[:, 1:]
             
+            # ipdb.set_trace()
+            src_padding_mask, tgt_padding_mask, tgt_mask = create_mask(b_waves, tgt_input, padding_indx)
+            src_padding_mask, tgt_padding_mask, tgt_mask = src_padding_mask.to(DEVICE), tgt_padding_mask.to(DEVICE), tgt_mask.to(DEVICE)
             
+            # ipdb.set_trace()
+            torch.autograd.set_detect_anomaly(True)
+            optimizer.zero_grad()
+            logits = model(b_waves, tgt_input, src_padding_mask=src_padding_mask, tgt_padding_mask=tgt_padding_mask, tgt_mask=tgt_mask)
             loss = loss_fn(logits.reshape(-1, logits.shape[-1]), tgt_out.reshape(-1))
             loss.backward()
     
@@ -134,8 +166,9 @@ def train(args):
             train_batches += loss.item()
             num_batches += 1
             
-            pbb = F.softmax(logits, dim=-1)
-            texts = torch.argmax(pbb, dim=-1).type(torch.LongTensor)
+            texts = greedy_decode(model, b_waves, tgt_input, src_padding_mask, tgt_input.size(dim=1)+5, bos_id=1, eos_id=2)
+            
+            # ipdb.set_trace()
             for i in range(len(b_texts)):
                 candidate_corpus.append(train_dataset.tokenizer.sp.decode_ids([word.item() for word in texts[i]]).lower().replace('.',' ').split())
                 reference_corpus.append(train_dataset.tokenizer.sp.decode_ids(b_texts[i]).lower().replace('.',' ').split())
@@ -147,7 +180,7 @@ def train(args):
                 num_batch_batches = 0
         
         # ipdb.set_trace()  
-        bleu_train= bleu_score(candidate_corpus, reference_corpus, max_n=4)
+        bleu_train= bleu_score(candidate_corpus, reference_corpus, max_n=5)
         ave = train_batches/num_batches
         
         print(f"Overall Epoch {epoch}: train loss :: { ave:.3f}, train bleu :: { bleu_train:.3f}")
@@ -168,7 +201,6 @@ def train(args):
                 }, path)
                 
 def evaluate(args):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     test_tsv_root = f'/datasets/CS678/{args.src_lan}/test_st_{args.src_lan}_{args.tgt_lan}.tsv'
     dev_tsv_root = f'/datasets/CS678/{args.src_lan}/dev_st_{args.src_lan}_{args.tgt_lan}.tsv'
     
@@ -197,18 +229,20 @@ def evaluate(args):
         model = CustomTransformer(embed_size=args.embed_size,
                                 heads=args.num_heads,
                                 inner_layer_size=args.inner_layer_size,
-                                n_blocks=args.num_blocs,
+                                n_blocks=args.num_blocks,
                                 vocab_size=args.vocab_size) #4 for the 4 tokens: BOS, EOS, UNK, PAD
 
-        model = model.to(device)
+        model = model.to(DEVICE)
         
         if torch.cuda.is_available():
             checkpoint = torch.load(f'/scratch/jvasqu6/CS678/Project/checkpoints/{args.src_lan}/model_{args.src_lan}_{args.tgt_lan}_ep_{epoch}.pt')
         else:
             checkpoint = torch.load(f'/scratch/jvasqu6/CS678/Project/checkpoints/{args.src_lan}/model_{args.src_lan}_{args.tgt_lan}_ep_{epoch}.pt',  map_location=torch.device('cpu'))
-    
-        bleu_dev, loss_dev = model_eval(dev_dataloader, dev_dataset.tokenizer, model, padding_indx, loss_fn, device)
-        bleu_test, loss_test = model_eval(test_dataloader, test_dataset.tokenizer, model, padding_indx, loss_fn, device)
+        
+        model.load_state_dict(checkpoint['model_state_dict'])
+        
+        bleu_dev, loss_dev = model_eval(dev_dataloader, dev_dataset.tokenizer, model, padding_indx, loss_fn)
+        bleu_test, loss_test = model_eval(test_dataloader, test_dataset.tokenizer, model, padding_indx, loss_fn)
         
         print(f"Overall Epoch {epoch}: dev loss :: {loss_dev:.3f}, test loss :: {loss_test:.3f}")
         print(f"Overall Epoch {epoch}: dev bleu :: {bleu_dev:.3f}, test bleu :: {bleu_test:.3f}")
@@ -243,7 +277,7 @@ def get_args():
 
     parser.add_argument('--embed_size', type=int, default=80, help='embedding size')
     parser.add_argument("--num_heads", type=int, default = 8, help='number of heads for multi attention heads, default 8')
-    parser.add_argument("--num_blocs", type=int, default = 5, help='number of blocks in the decoder and encoder, default 4')
+    parser.add_argument("--num_blocks", type=int, default = 5, help='number of blocks in the decoder and encoder, default 5')
     parser.add_argument("--inner_layer_size", type=int, default = 256, help='inner layer size, default 512')
     parser.add_argument("--dropout", type=float, default = .2, help='dropout, default 0.2')
     
