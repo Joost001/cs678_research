@@ -317,5 +317,5 @@ def create_mask(src, tgt, pad_idx):
 
 def make_tgt_mask(tgt):
     batch_size, tgt_len = tgt.shape
-    mask = (torch.triu(torch.ones((tgt_len, tgt_len)))).expand(batch_size, 1, tgt_len, tgt_len)
+    mask = (torch.tril(torch.ones((tgt_len, tgt_len)))).expand(batch_size, 1, tgt_len, tgt_len)
     return mask
